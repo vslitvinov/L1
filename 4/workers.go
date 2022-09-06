@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/signal"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -16,69 +13,43 @@ import (
 // Реализовать набор из N воркеров, которые читают произвольные данные из канала и выводят в stdout.
 // Необходима возможность выбора количества воркеров при старте.
 // Программа должна завершаться по нажатию Ctrl+C. Выбрать и обосновать способ завершения работы всех воркеров.
+//
 
+func GenWorker(n int, wg *sync.WaitGroup) (chan  interface{}) {
+	ch := make(chan interface{},n)
 
-// Workers - workers structure
-type Workers struct {
-	wg     sync.WaitGroup
-	ch     chan interface{}
-	cancel context.CancelFunc
-	amount int
-}
-
-// NewWorkers - creates a new workers instance
-func NewWorkers(amount int, cancel context.CancelFunc) *Workers {
-	return &Workers{
-		amount: amount,
-		cancel: cancel,
-		ch:     make(chan interface{}, amount),
-	}
-}
-
-// Start workers
-func (w *Workers) Start(ctx context.Context) {
-	for i := 0; i < w.amount; i++ {
-		w.wg.Add(1)
-		go func(workerId int) {
-			defer w.wg.Done()
-
+	fmt.Println("worker gen")
+	for i:=0;i<n;i++ {
+		wg.Add(1)
+		go func(id int ){
+			defer wg.Done()
+			fmt.Printf("Worker id %v starting \n", id)
 			for {
 				select {
-				case data := <-w.ch:
-					fmt.Printf("Worker %d read data from channel: Type %T, Value %v\n", workerId, data, data)
-				case <-ctx.Done():
-					fmt.Println("Worker ", workerId, " stopped")
-					return
+				case data, ok := <- ch:
+					if ok {
+						fmt.Printf("Worker id :%b, read data from the channel : %d \n",id,data)
+					} else {
+						fmt.Printf("Worker id: %v stop \n",id)
+						return 
+					}
 				}
 			}
 		}(i)
 	}
+	return ch
+
 }
 
-// Stop all workers
-func (w *Workers) Stop() {
-	w.cancel()
-	w.wg.Wait()
-	close(w.ch)
-	fmt.Println("All workers have been stopped")
-}
 
-// SendData - sends data via channel to workers
-func (w *Workers) SendData(data interface{}) {
-	w.ch <- data
-}
+func main(){
 
-func main() {
-
-	var (
-		numOfWorkers int
-		err          error
-	)
-
-	// checking for arguments
+	// worker count
+	var n int	
+	var err error
 	if len(os.Args) == 2 {
-		numOfWorkers, err = strconv.Atoi(os.Args[1])
-		if err != nil || numOfWorkers == 0 {
+		n, err = strconv.Atoi(os.Args[1])
+		if err != nil || n == 0 {
 			fmt.Println("You need to write a number starting from 1")
 			return
 		}
@@ -87,29 +58,32 @@ func main() {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	workers := NewWorkers(numOfWorkers, cancel)
-	workers.Start(ctx)
+	i:=0
+	wg := sync.WaitGroup{}
+	fmt.Println(n)
+	ch := GenWorker(n,&wg)
+	
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	signal.Notify(sigs, os.Interrupt)
+	defer wg.Wait()
 	for {
-		num := generator.Intn(1000)
-		chars := 'a' + rune(generator.Intn('z'-'a'+1)) // 'a' <= chars <= 'z'
-
+		i++
 		select {
-		case signals := <-sigs:
-			workers.Stop()
-			fmt.Printf("Programm has been stopped by signal %d\n", signals)
-			return
+		case signal := <- sigs:
+			close(ch)
+			fmt.Printf("Close app signal %s",signal)
+			return 
 		default:
-			workers.SendData(num)
-			workers.SendData(string(chars))
+			ch <- i
 		}
 
 		time.Sleep(time.Millisecond * 100)
 	}
+
+
+
+
 }
+
+
