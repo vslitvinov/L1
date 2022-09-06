@@ -66,13 +66,13 @@ func main(){
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
-	defer wg.Wait()
 	for {
 		i++
 		select {
 		case signal := <- sigs:
 			close(ch)
-			fmt.Printf("Close app signal %s",signal)
+			wg.Wait()
+			fmt.Printf("Close app signal %s \n",signal)
 			return 
 		default:
 			ch <- i
